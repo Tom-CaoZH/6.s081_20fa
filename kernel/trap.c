@@ -13,6 +13,7 @@ extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
+void page_fault_handler(void);
 
 extern int devintr();
 
@@ -68,9 +69,16 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+    // 13 : load page table ; 15 : store page table
+    if(r_scause() == 13 || r_scause() == 15 || r_scause() == 12) {
+        page_fault_handler();
+    }
+    else 
+    {
+        printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+        printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+        p->killed = 1;
+    }
   }
 
   if(p->killed)
@@ -149,6 +157,7 @@ kerneltrap()
     panic("kerneltrap");
   }
 
+
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
     yield();
@@ -218,3 +227,21 @@ devintr()
   }
 }
 
+void 
+page_fault_handler(void)
+{
+    struct proc* p = myproc();
+    uint64 va = r_stval();
+    if(va >= p->sz || va <= PGROUNDDOWN(p->trapframe->sp) || va >= MAXVA) {
+        p->killed = 1;
+    }
+    char* mem = kalloc();
+    if(mem == 0){
+        p->killed = 1;
+    }
+    memset(mem, 0, PGSIZE);
+    if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+        panic("page fault map error\n");
+        kfree(mem);
+    }
+}
