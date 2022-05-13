@@ -19,6 +19,37 @@ struct {
   struct file file[NFILE];
 } ftable;
 
+/* // a helper function for syscall funciton to check whether the addr is a lazy page addr */
+/* // 0 ---> not a lazy page , a normal and valid addr */
+/* // 1 ---> a lazy page , if in write syscall , we could do nothing */
+/* // -1 --> some error happens */
+/* int */ 
+/* checkAddrValid(uint64 va) */ 
+/* { */
+/*     pte_t* pte; */
+/*     struct proc* p = myproc(); */
+/*     if(va >= p->sz || va <= PGROUNDDOWN(p->trapframe->sp) || va >= MAXVA) { */
+/*         return -1; */
+/*     } */
+/*     if((pte = walk(p->pagetable,va,0)) == 0) { */
+/*         // a lazy page */ 
+/*         uint64 oldsz = PGROUNDDOWN(va); */
+/*         char* mem = kalloc(); */
+/*         if(mem == 0){ */
+/*             uvmdealloc(p->pagetable, oldsz + PGSIZE, oldsz); */
+/*             return -1; */
+/*         } */
+/*         memset(mem, 0, PGSIZE); */
+/*         if(mappages(p->pagetable,PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){ */
+/*             printf("page fault map error\n"); */
+/*             kfree(mem); */
+/*             uvmdealloc(p->pagetable, oldsz + PGSIZE, oldsz); */
+/*             return -1; */
+/*         } */
+/*         return 1; */
+/*     } */
+/*     return 0; */
+/* } */
 void
 fileinit(void)
 {
@@ -134,6 +165,7 @@ fileread(struct file *f, uint64 addr, int n)
 int
 filewrite(struct file *f, uint64 addr, int n)
 {
+  uint64 copy_addr = addr;
   int r, ret = 0;
 
   if(f->writable == 0)
@@ -170,6 +202,7 @@ filewrite(struct file *f, uint64 addr, int n)
         break;
       if(r != n1)
         panic("short filewrite");
+      copy_addr += i;
       i += r;
     }
     ret = (i == n ? n : -1);

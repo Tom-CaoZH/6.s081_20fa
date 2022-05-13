@@ -13,7 +13,7 @@ extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
-void page_fault_handler(void);
+int page_fault_handler(void);
 
 extern int devintr();
 
@@ -70,8 +70,10 @@ usertrap(void)
     // ok
   } else {
     // 13 : load page table ; 15 : store page table
-    if(r_scause() == 13 || r_scause() == 15 || r_scause() == 12) {
-        page_fault_handler();
+    if(r_scause() == 13 || r_scause() == 15 ) {
+        if(page_fault_handler() < 0) {
+            p->killed = 1;
+        }
     }
     else 
     {
@@ -227,21 +229,26 @@ devintr()
   }
 }
 
-void 
+int 
 page_fault_handler(void)
 {
     struct proc* p = myproc();
     uint64 va = r_stval();
+    uint64 oldsz = PGROUNDDOWN(va);
     if(va >= p->sz || va <= PGROUNDDOWN(p->trapframe->sp) || va >= MAXVA) {
-        p->killed = 1;
+        return -1;
     }
     char* mem = kalloc();
     if(mem == 0){
-        p->killed = 1;
+        uvmdealloc(p->pagetable, oldsz + PGSIZE, oldsz);
+        return -1;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-        panic("page fault map error\n");
+    if(mappages(p->pagetable,PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+        printf("page fault map error\n");
         kfree(mem);
+        uvmdealloc(p->pagetable, oldsz + PGSIZE, oldsz);
+        return -1;
     }
+    return 0;
 }

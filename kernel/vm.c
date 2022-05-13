@@ -106,18 +106,18 @@ walkaddr(pagetable_t pagetable, uint64 va)
   if(pte == 0 || (*pte & PTE_V) == 0) {
     struct proc* p = myproc();
     if(va >= p->sz || va <= PGROUNDDOWN(p->trapframe->sp) || va >= MAXVA) {
-        p->killed = 1;
+        return 0;
     }
     char* mem = kalloc();
     if(mem == 0){
-        p->killed = 1;
+        return 0;
     }
     memset(mem, 0, PGSIZE);
     if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
         panic("page fault map error\n");
         kfree(mem);
+        return 0;
     }
-
   }
   if((*pte & PTE_U) == 0)
     return 0;
@@ -201,8 +201,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
         continue;    // This is the key
       /* panic("uvmunmap: not mapped"); */
     if(PTE_FLAGS(*pte) == PTE_V)
-        continue;
-      /* panic("uvmunmap: not a leaf"); */
+        panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
@@ -300,8 +299,7 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
-        continue;
-      /* panic("freewalk: leaf"); */
+        panic("freewalk: leaf");
     }
   }
   kfree((void*)pagetable);
@@ -403,6 +401,10 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
+    /* if(checkAddrValid(va0) == -1 ) { */
+    /*   printf("hello\n"); */
+    /*   myproc()->killed = 1; */
+    /* } */
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
